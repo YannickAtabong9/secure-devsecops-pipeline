@@ -1,0 +1,26 @@
+{
+  "family": "secure-task",
+  "networkMode": "awsvpc",
+  "requiresCompatibilities": ["FARGATE"],
+  "cpu": "256",
+  "memory": "512",
+  "executionRoleArn": "arn:aws:iam::711387137403:role/ecsTaskExecutionRole",
+  "containerDefinitions": [
+    {
+      "name": "secure-node-app",
+      "image": "711387137403.dkr.ecr.us-east-1.amazonaws.com/secure-node-app:latest",
+      "essential": true,
+      "portMappings": [
+        { "containerPort": 3000, "protocol": "tcp" }
+      ],
+      "logConfiguration": {
+        "logDriver": "awslogs",
+        "options": {
+          "awslogs-group": "/ecs/secure-node-app",
+          "awslogs-region": "us-east-1",
+          "awslogs-stream-prefix": "ecs"
+        }
+      }
+    }
+  ]
+}

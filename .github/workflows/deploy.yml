@@ -1,0 +1,52 @@
+name: Production DevSecOps Pipeline
+
+on:
+  push:
+    branches: [main]
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+
+    steps:
+      # Step 1: Checkout code
+      - name: Checkout repository
+        uses: actions/checkout@v3
+
+      # Step 2: Build Docker image
+      - name: Build Docker Image
+        run: docker build -t secure-node-app .
+
+      # Step 3: Trivy container scan
+      - name: Trivy Scan
+        uses: aquasecurity/trivy-action@master
+        with:
+          image-ref: secure-node-app:latest
+          exit-code: 1
+          severity: CRITICAL,HIGH
+
+      # Step 4: Semgrep static code analysis
+      - name: Semgrep Scan
+        uses: returntocorp/semgrep-action@v2
+        with:
+          config: "p/ci"  # use CI rules for scanning
+          fail-on: "any"  # fail workflow if any issues found
+
+      # Step 5: Login to AWS ECR
+      - name: AWS ECR Login
+        uses: aws-actions/amazon-ecr-login@v2
+
+      # Step 6: Tag and push Docker image to ECR
+      - name: Push Docker image to ECR
+        run: |
+          docker tag secure-node-app:latest 711387137403.dkr.ecr.us-east-1.amazonaws.com/secure-node-app:latest
+          docker push 711387137403.dkr.ecr.us-east-1.amazonaws.com/secure-node-app:latest
+
+      # Step 7: Deploy to ECS
+      - name: Deploy to ECS
+        uses: aws-actions/amazon-ecs-deploy-task-definition@v1
+        with:
+          cluster: secure-cluster
+          service: secure-node-service
+          task-definition: secure-task:2
+          wait-for-service-stability: true
