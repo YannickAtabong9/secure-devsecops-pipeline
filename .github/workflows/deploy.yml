@@ -27,7 +27,7 @@ jobs:
 
       # Step 4: Semgrep static code analysis
       - name: Semgrep Scan
-        uses: returntocorp/semgrep-action@v2
+        uses: returntocorp/semgrep-action@v1
         with:
           config: "p/ci"  # use CI rules for scanning
           fail-on: "any"  # fail workflow if any issues found
