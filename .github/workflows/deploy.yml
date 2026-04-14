@@ -15,7 +15,7 @@ jobs:
 
       # Step 2: Build Docker image
       - name: Build Docker Image
-        run: docker build -t secure-node-app .
+        run: docker build -t secure-node-app:latest .
 
       # Step 3: Trivy container scan
       - name: Trivy Scan
@@ -29,22 +29,28 @@ jobs:
       - name: Semgrep Scan
         uses: returntocorp/semgrep-action@v1
         with:
-          config: "p/ci"  # use CI rules for scanning
-          fail-on: "any"  # fail workflow if any issues found
+          config: "p/ci"
+          fail-on: "any"
 
-      # Step 5: Login to AWS ECR
+      # Step 5: Configure AWS credentials (MISSING IN YOUR VERSION)
+      - name: Configure AWS Credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ${{ secrets.AWS_REGION }}
+
+      # Step 6: Login to AWS ECR
       - name: AWS ECR Login
         uses: aws-actions/amazon-ecr-login@v2
-         env:
-           AWS_REGION: ${{ secrets.AWS_REGION }}
 
-      # Step 6: Tag and push Docker image to ECR
+      # Step 7: Tag and push Docker image to ECR
       - name: Push Docker image to ECR
         run: |
           docker tag secure-node-app:latest 711387137403.dkr.ecr.us-east-1.amazonaws.com/secure-node-app:latest
           docker push 711387137403.dkr.ecr.us-east-1.amazonaws.com/secure-node-app:latest
 
-      # Step 7: Deploy to ECS
+      # Step 8: Deploy to ECS
       - name: Deploy to ECS
         uses: aws-actions/amazon-ecs-deploy-task-definition@v1
         with:
