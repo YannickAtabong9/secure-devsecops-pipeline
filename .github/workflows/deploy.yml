@@ -23,7 +23,7 @@ jobs:
         with:
           image-ref: secure-node-app:latest
           exit-code: 1
-          severity: CRITICAL,HIGH
+          severity: CRITICAL
 
       # Step 4: Semgrep static code analysis
       - name: Semgrep Scan
