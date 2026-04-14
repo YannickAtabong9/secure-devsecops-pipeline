@@ -54,7 +54,7 @@ jobs:
       - name: Deploy to ECS
         uses: aws-actions/amazon-ecs-deploy-task-definition@v1
         with:
+          task-definition: task-definition.json
           cluster: secure-cluster
           service: secure-node-service
-          task-definition: secure-task:2
           wait-for-service-stability: true
