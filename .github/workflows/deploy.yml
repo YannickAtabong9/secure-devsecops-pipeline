@@ -35,6 +35,8 @@ jobs:
       # Step 5: Login to AWS ECR
       - name: AWS ECR Login
         uses: aws-actions/amazon-ecr-login@v2
+         env:
+           AWS_REGION: ${{ secrets.AWS_REGION }}     
 
       # Step 6: Tag and push Docker image to ECR
       - name: Push Docker image to ECR
