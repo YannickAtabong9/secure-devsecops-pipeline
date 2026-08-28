@@ -1,60 +1,101 @@
-name: Production DevSecOps Pipeline!
+name: Production DevSecOps Pipeline
 
 on:
   push:
     branches: [main]
+  pull_request:
+    branches: [main]
+
+permissions:
+  contents: read
+  id-token: write
+
+env:
+  AWS_REGION: us-east-1
+  ECR_REPOSITORY: secure-node-app
+  ECS_CLUSTER: secure-cluster
+  ECS_SERVICE: secure-node-service
+  ECS_TASK_DEFINITION: task-definition.json
+  CONTAINER_NAME: secure-node-app
 
 jobs:
-  deploy:
+  security-and-build:
+    name: Security & Build
     runs-on: ubuntu-latest
 
     steps:
-      # Step 1: Checkout code
       - name: Checkout repository
-        uses: actions/checkout@v3
+        uses: actions/checkout@v4
 
-      # Step 2: Build Docker image
-      - name: Build Docker Image
-        run: docker build -t secure-node-app:latest .
+      - name: Build Docker image
+        run: |
+          docker build \
+            -t ${{ env.ECR_REPOSITORY }}:${{ github.sha }} \
+            .
 
-      # Step 3: Trivy container scan
-      - name: Trivy Scan
+      - name: Scan container with Trivy
         uses: aquasecurity/trivy-action@master
         with:
-          image-ref: secure-node-app:latest
-          exit-code: 1
-          severity: CRITICAL
+          image-ref: '${{ env.ECR_REPOSITORY }}:${{ github.sha }}'
+          format: table
+          exit-code: '1'
+          severity: 'CRITICAL'
+          ignore-unfixed: true
 
-      # Step 4: Semgrep static code analysis
-      - name: Semgrep Scan
-        uses: returntocorp/semgrep-action@v1
-        with:
-          config: "p/ci"
-          fail-on: "any"
+      - name: Run Semgrep SAST
+        run: |
+          python -m pip install --upgrade pip
+          pip install semgrep
+          semgrep scan --config p/ci --error
 
-      # Step 5: Configure AWS credentials (MISSING IN YOUR VERSION)
-      - name: Configure AWS Credentials
+  deploy:
+    name: Deploy to AWS ECS
+    needs: security-and-build
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+
+    permissions:
+      contents: read
+      id-token: write
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Configure AWS credentials using OIDC
         uses: aws-actions/configure-aws-credentials@v4
         with:
-          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
-          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
-          aws-region: ${{ secrets.AWS_REGION }}
+          role-to-assume: ${{ secrets.AWS_DEPLOY_ROLE_ARN }}
+          aws-region: ${{ env.AWS_REGION }}
 
-      # Step 6: Login to AWS ECR
-      - name: AWS ECR Login
+      - name: Login to Amazon ECR
+        id: login-ecr
         uses: aws-actions/amazon-ecr-login@v2
 
-      # Step 7: Tag and push Docker image to ECR
-      - name: Push Docker image to ECR
+      - name: Build and push immutable Docker image
+        id: build-image
+        env:
+          ECR_REGISTRY: ${{ steps.login-ecr.outputs.registry }}
         run: |
-          docker tag secure-node-app:latest 711387137403.dkr.ecr.us-east-1.amazonaws.com/secure-node-app:latest
-          docker push 711387137403.dkr.ecr.us-east-1.amazonaws.com/secure-node-app:latest
+          IMAGE_URI=$ECR_REGISTRY/${{ env.ECR_REPOSITORY }}:${{ github.sha }}
 
-      # Step 8: Deploy to ECS
-      - name: Deploy to ECS
-        uses: aws-actions/amazon-ecs-deploy-task-definition@v1
+          docker build -t $IMAGE_URI .
+          docker push $IMAGE_URI
+
+          echo "image=$IMAGE_URI" >> "$GITHUB_OUTPUT"
+
+      - name: Update ECS task definition
+        id: task-definition
+        uses: aws-actions/amazon-ecs-render-task-definition@v1
         with:
-          task-definition: task-definition.json
-          cluster: secure-cluster
-          service: secure-node-service
+          task-definition: ${{ env.ECS_TASK_DEFINITION }}
+          container-name: ${{ env.CONTAINER_NAME }}
+          image: ${{ steps.build-image.outputs.image }}
+
+      - name: Deploy to Amazon ECS
+        uses: aws-actions/amazon-ecs-deploy-task-definition@v2
+        with:
+          task-definition: ${{ steps.task-definition.outputs.task-definition }}
+          service: ${{ env.ECS_SERVICE }}
+          cluster: ${{ env.ECS_CLUSTER }}
           wait-for-service-stability: true
